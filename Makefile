@@ -48,7 +48,7 @@ INCLUDE += -I ./pmdk/src/PMDK/src/include
 LIBS +=  -L ./pmdk/src/PMDK/src/nondebug -lpmem -lpmemobj
 endif
 
-all: main
+all: main libiceberghashtable.so
 
 obj/%.o: src/%.c
 	@ mkdir -p obj
@@ -68,7 +68,10 @@ main: $(OBJECTS) obj/main.o
 ycsb: $(OBJECTS) obj/ycsb.o
 	$(CPP) $(CFLAGS) $^ -o $@ $(LIBS)
 
+libiceberghashtable.so: $(OBJECTS)
+	$(CPP) -shared -fPIC $(CFLAGS) $^ -o $@ $(LIBS)
+
 .PHONY: clean directories
 
 clean:
-	rm -f main ycsb $(OBJECTS) obj/main.o obj/ycsb.o
+	rm -f main ycsb libiceberghashtable.so $(OBJECTS) obj/main.o obj/ycsb.o
