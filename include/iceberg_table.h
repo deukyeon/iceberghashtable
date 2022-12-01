@@ -124,6 +124,7 @@ extern "C" {
 
   bool iceberg_get_value(iceberg_table * table, KeyType key, ValueType **value, uint8_t thread_id);
 
+  bool iceberg_get_key_value(iceberg_table * table, KeyType *key, ValueType **value, uint8_t thread_id);
 #ifdef PMEM
   uint64_t iceberg_dismount(iceberg_table *table);
   int iceberg_mount(iceberg_table *table, uint64_t log_slots, uint64_t resize_cnt);
