@@ -37,7 +37,7 @@ OPT += $(RESIZE_POLICY) $(BLOCK_LOCKING) $(THRPT_POLICY) $(LATENCY_POLICY) $(PME
 
 CC = clang
 CPP = clang++
-CFLAGS = $(OPT) -Wall -march=native -pthread $(HUGE) -Werror -Wfatal-errors
+CFLAGS = $(OPT) -Wall -march=native -pthread $(HUGE) -Werror -Wfatal-errors -fPIC
 INCLUDE = -I ./include
 SOURCES = src/iceberg_table.c src/hashutil.c src/partitioned_counter.c src/lock.c
 OBJECTS = $(subst src/,obj/,$(subst .c,.o,$(SOURCES)))
@@ -69,7 +69,7 @@ ycsb: $(OBJECTS) obj/ycsb.o
 	$(CPP) $(CFLAGS) $^ -o $@ $(LIBS)
 
 libiceberghashtable.so: $(OBJECTS)
-	$(CPP) -shared -fPIC $(CFLAGS) $^ -o $@ $(LIBS)
+	$(CPP) -shared $(CFLAGS) $^ -o $@ $(LIBS)
 
 .PHONY: clean directories
 
