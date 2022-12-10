@@ -118,7 +118,31 @@ extern "C" {
 
   double iceberg_load_factor(iceberg_table * table);
 
+/** 
+ *
+ * If there exists a key in the hash table, it increases its refcount by one
+ * without updating the value. Otherwise, the value of 0 with the refcount of 1
+ * is inserted.
+ *
+ */
   bool iceberg_insert(iceberg_table * table, KeyType key, ValueType value, uint8_t thread_id);
+
+/** 
+ *
+ * If there exists a key in the hash table, it just overwrites the value without
+ * increasing the refcount. Otherwise, it does nothing.
+ *
+ */
+  bool iceberg_update(iceberg_table * table, KeyType key, ValueType value, uint8_t thread_id);
+
+/** 
+ *
+ * If there exists a key in the hash table, it increases its refcount by one and
+ * overwrites the value. Otherwise, the value of 0 with the refcount of 1 is
+ * inserted.
+ *
+ */
+  bool iceberg_put(iceberg_table * table, KeyType key, ValueType value, uint8_t thread_id);
 
   bool iceberg_remove(iceberg_table * table, KeyType key, uint8_t thread_id);
 
