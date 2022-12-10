@@ -23,8 +23,8 @@ extern "C" {
   typedef char * KeyType;
 
   typedef struct {
-    uint64_t refcount : 4;
-    uint64_t value    : 60;
+    uint64_t refcount : 5;
+    uint64_t value    : 59;
   } ValueType;
 
   typedef struct __attribute__ ((__packed__)) kv_pair {
