@@ -1684,7 +1684,7 @@ iceberg_lv3_remove(iceberg_table *table,
                           __ATOMIC_SEQ_CST)
           == 0)
       { // not fixed yet
-         return iceberg_lv3_remove_internal(table, *key, old_index, thread_id);
+         return iceberg_lv3_remove_internal(table, key, old_index, thread_id);
       } else {
          // wait for the old block to be fixed
          uint64_t dest_chunk_idx = lv3_index / 8;
@@ -2237,6 +2237,10 @@ iceberg_get_key_value(iceberg_table *table,
       int slot = __builtin_ctzll(md_mask);
       md_mask  = md_mask & ~(1ULL << slot);
 
+      if (blocks[boffset].slots[slot].key == NULL) {
+         continue;
+      }
+
       if (iceberg_key_compare(blocks[boffset].slots[slot].key, *key) == 0) {
          *key   = blocks[boffset].slots[slot].key;
          *value = &blocks[boffset].slots[slot].val;
@@ -2442,7 +2446,7 @@ iceberg_lv3_move_block(iceberg_table *table, uint64_t bnum, uint8_t thread_id)
                printf("Failed insert during resize lv3\n");
                exit(0);
             }
-            if (!iceberg_lv3_remove(table, key, bnum, thread_id)) {
+            if (!iceberg_lv3_remove(table, &key, bnum, thread_id)) {
                printf("Failed remove during resize lv3: %s\n", key);
                exit(0);
             }
