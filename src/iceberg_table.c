@@ -1226,7 +1226,7 @@ iceberg_lv2_insert_internal(iceberg_table *table,
 
 start:;
    __mmask32 md_mask =
-      slot_mask_32(metadata->lv2_md[bindex][boffset].block_md, fprint)
+      slot_mask_32(metadata->lv2_md[bindex][boffset].block_md, 0)
       & ((1 << (C_LV2 + MAX_LG_LG_N / D_CHOICES)) - 1);
    uint8_t popct = __builtin_popcountll(md_mask);
 
@@ -1291,10 +1291,10 @@ iceberg_lv2_insert(iceberg_table *table,
    get_index_offset(table->metadata.log_init_size, index2, &bindex2, &boffset2);
 
    __mmask32 md_mask1 =
-      slot_mask_32(metadata->lv2_md[bindex1][boffset1].block_md, fprint1)
+      slot_mask_32(metadata->lv2_md[bindex1][boffset1].block_md, 0)
       & ((1 << (C_LV2 + MAX_LG_LG_N / D_CHOICES)) - 1);
    __mmask32 md_mask2 =
-      slot_mask_32(metadata->lv2_md[bindex2][boffset2].block_md, fprint2)
+      slot_mask_32(metadata->lv2_md[bindex2][boffset2].block_md, 0)
       & ((1 << (C_LV2 + MAX_LG_LG_N / D_CHOICES)) - 1);
 
    uint8_t popct1 = __builtin_popcountll(md_mask1);
@@ -1363,7 +1363,7 @@ iceberg_insert_internal(iceberg_table *table,
    iceberg_lv1_block *blocks   = table->level1[bindex];
 start:;
    __mmask64 md_mask =
-      slot_mask_64(metadata->lv1_md[bindex][boffset].block_md, fprint);
+      slot_mask_64(metadata->lv1_md[bindex][boffset].block_md, 0);
 
    uint8_t popct = __builtin_popcountll(md_mask);
 
