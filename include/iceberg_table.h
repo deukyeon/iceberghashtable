@@ -172,7 +172,7 @@ bool
 iceberg_remove_and_get_key(iceberg_table *table,
                            KeyType       *key,
                            uint8_t        thread_id);
-                           
+
 bool
 iceberg_force_remove(iceberg_table *table, KeyType key, uint8_t thread_id);
 
