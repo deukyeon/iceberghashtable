@@ -2186,10 +2186,10 @@ iceberg_lv2_get_value(iceberg_table *table,
 }
 
 __attribute__((always_inline)) inline bool
-iceberg_get_key_value(iceberg_table *table,
-                      KeyType       *key,
-                      ValueType    **value,
-                      uint8_t        thread_id)
+iceberg_get_key_value(iceberg_table                  *table,
+                      KeyType                        *key,
+                      ValueType                     **value,
+                      __attribute__((unused)) uint8_t thread_id)
 {
    iceberg_metadata *metadata = &table->metadata;
 
@@ -2469,7 +2469,7 @@ iceberg_lv3_move_block(iceberg_table *table, uint64_t bnum, uint8_t thread_id)
                printf("Failed insert during resize lv3\n");
                exit(0);
             }
-            if (!iceberg_lv3_remove(table, &key, bnum, thread_id)) {
+            if (!iceberg_lv3_remove(table, &key, bnum, true, thread_id)) {
                printf("Failed remove during resize lv3: %s\n", key);
                exit(0);
             }

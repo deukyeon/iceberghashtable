@@ -35,7 +35,7 @@ void do_inserts(uint8_t id, char **keys, ValueType *values, uint64_t start, uint
 #ifdef LATENCY
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 #endif
-    if(!iceberg_insert(&table, keys[i], values[i], id)) {
+    if(!iceberg_put(&table, keys[i], values[i], id)) {
       printf("Failed insert\n");
       exit(0);
     }
@@ -97,13 +97,18 @@ void do_queries(uint8_t id, char **keys, uint64_t start, uint64_t n, bool positi
 #endif
 }
 
-void do_removals(uint8_t id, char **keys, uint64_t start, uint64_t n) {
+void do_removals(uint8_t id, char **keys, uint64_t start, uint64_t n, bool force_remove) {
   //uint64_t val;
-  for(uint64_t i = start; i < start + n; ++i)
-    if(!iceberg_remove(&table, keys[i], id)) {
-      printf("Failed removal\n");
-      exit(0);
+  for(uint64_t i = start; i < start + n; ++i) {
+    if (force_remove) {
+      if(!iceberg_force_remove(&table, keys[i], id)) {
+	printf("Failed removal\n");
+	exit(0);
+      }
+    } else {
+      iceberg_remove(&table, keys[i], id);
     }
+  }
 }
 
 void safe_rand_bytes(unsigned char *v, size_t n) {
@@ -134,7 +139,7 @@ int main (int argc, char** argv) {
 
   uint64_t tbits = atoi(argv[1]);
   uint64_t threads = atoi(argv[2]);
-  uint64_t N = (1ULL << tbits) * 1.07;
+  uint64_t N = 10000000; //(1ULL << tbits) * 1.07;
   //uint64_t N = (1ULL << tbits) * 1.07 * 1.90;
 
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
@@ -317,7 +322,7 @@ int main (int argc, char** argv) {
 
   for(uint64_t i = 0; i < splits; ++i) {
     for(uint64_t j = 0; j < threads; j++)
-      thread_list.emplace_back(do_removals, j, in_key_ptrs, (i * threads + j) * size, size);
+      thread_list.emplace_back(do_removals, j, in_key_ptrs, (i * threads + j) * size, size, false);
     for(uint64_t j = 0; j < threads; j++)
       thread_list[j].join();
     thread_list.clear();
@@ -355,7 +360,7 @@ int main (int argc, char** argv) {
   t1 = high_resolution_clock::now();
 
   for(uint64_t i = 0; i < threads; ++i)
-    thread_list.emplace_back(do_removals, i, removed, i * (N / 2 / threads), N / 2 / threads);
+    thread_list.emplace_back(do_removals, i, removed, i * (N / 2 / threads), N / 2 / threads, true);
   for(uint64_t i = 0; i < threads; ++i)
     thread_list[i].join();
 

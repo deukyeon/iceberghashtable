@@ -10,7 +10,7 @@ else
    HUGE=
 endif
 
-RESIZE_POLICY =
+RESIZE_POLICY = -DENABLE_RESIZE
 BLOCK_LOCKING = -DENABLE_BLOCK_LOCKING
 
 ifdef NBL
@@ -18,7 +18,7 @@ ifdef NBL
 endif
 
 ifdef NORESIZE
-	RESIZE_POLICY = 
+	RESIZE_POLICY =
 endif
 
 ifdef INST
@@ -37,11 +37,11 @@ OPT += $(RESIZE_POLICY) $(BLOCK_LOCKING) $(THRPT_POLICY) $(LATENCY_POLICY) $(PME
 
 CC = clang
 CPP = clang++
-CFLAGS = $(OPT) -Wall -march=native -pthread $(HUGE) -Werror -Wfatal-errors -fPIC
+CFLAGS = $(OPT) -Wall -Wextra -march=native -pthread $(HUGE) -Werror -Wfatal-errors -fPIC
 INCLUDE = -I ./include
 SOURCES = src/iceberg_table.c src/hashutil.c src/partitioned_counter.c src/lock.c
 OBJECTS = $(subst src/,obj/,$(subst .c,.o,$(SOURCES)))
-LIBS = -lssl -lcrypto -ltbb 
+LIBS = -lssl -lcrypto -ltbb
 
 ifdef PMEM
 INCLUDE += -I ./pmdk/src/PMDK/src/include
@@ -69,7 +69,7 @@ ycsb: $(OBJECTS) obj/ycsb.o
 	$(CPP) $(CFLAGS) $^ -o $@ $(LIBS)
 
 libiceberghashtable.so: $(OBJECTS)
-	$(CPP) -shared $(CFLAGS) $^ -o $@ $(LIBS)
+	$(CC) $(CFLAGS) $^ -shared -o $@ $(LIBS)
 
 .PHONY: clean directories
 
