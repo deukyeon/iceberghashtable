@@ -266,17 +266,17 @@ int main (int argc, char** argv) {
     printf("Total inserts: %ld\n", tot_balls(&table));
   }
 
-  uint64_t max_size = 0, sum_sizes = 0;
-  for(uint64_t i = 0; i < table.metadata.nblocks; ++i) {
-    max_size = std::max(max_size, table.metadata.lv3_sizes[0][i]);
-    sum_sizes += table.metadata.lv3_sizes[0][i];
-  }
+  // uint64_t max_size = 0, sum_sizes = 0;
+  // for(uint64_t i = 0; i < table.metadata.nblocks; ++i) {
+  //   max_size = std::max(max_size, table.metadata.lv3_sizes[0][i]);
+  //   sum_sizes += table.metadata.lv3_sizes[0][i];
+  // }
 
-  if (!is_benchmark) {
-    printf("Average list size: %f\n", sum_sizes / (double)table.metadata.nblocks);
-    printf("Max list size: %ld\n", max_size);
+  // if (!is_benchmark) {
+  //   printf("Average list size: %f\n", sum_sizes / (double)table.metadata.nblocks);
+  //   printf("Max list size: %ld\n", max_size);
 
-  }
+  // }
 
   std::mt19937 g(__builtin_ia32_rdtsc());
 
@@ -311,10 +311,10 @@ int main (int argc, char** argv) {
     printf("Total inserts: %ld\n", tot_balls(&table));
   }
 
-  for(uint64_t i = 0; i < table.metadata.nblocks; ++i) {
-    max_size = std::max(max_size, table.metadata.lv3_sizes[0][i]);
-    sum_sizes += table.metadata.lv3_sizes[0][i];
-  }
+  // for(uint64_t i = 0; i < table.metadata.nblocks; ++i) {
+  //   max_size = std::max(max_size, table.metadata.lv3_sizes[0][i]);
+  //   sum_sizes += table.metadata.lv3_sizes[0][i];
+  // }
 
   if (!is_benchmark) {
     printf("REFCOUNT DECREMENTS\n");

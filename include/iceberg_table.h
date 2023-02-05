@@ -16,7 +16,7 @@ extern "C" {
 #define D_CHOICES   2
 #define MAX_LG_LG_N 4
 #define C_LV2       6
-#define MAX_RESIZES 8
+#define MAX_RESIZES 32
 
 #define KEY_SIZE 24
 
