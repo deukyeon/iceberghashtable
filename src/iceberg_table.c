@@ -2004,7 +2004,7 @@ iceberg_lv3_get_key_value_internal(iceberg_table *table,
    iceberg_lv3_node *current_node = lists[boffset].head;
 #endif
 
-   for (uint8_t i = 0; i < metadata->lv3_sizes[bindex][boffset]; ++i) {
+   for (uint64_t i = 0; i < metadata->lv3_sizes[bindex][boffset]; ++i) {
       if (iceberg_key_compare(current_node->key, *key) == 0) {
          *key                                 = current_node->key;
          *value                               = &current_node->val;
