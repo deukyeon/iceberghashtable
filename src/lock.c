@@ -4,7 +4,7 @@
 
 #include "lock.h"
 
-#define NUM_COUNTERS 16
+#define NUM_COUNTERS 64
 
 /**
  * Try to acquire a lock once and return even if the lock is busy.
