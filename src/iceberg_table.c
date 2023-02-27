@@ -851,7 +851,7 @@ iceberg_setup_resize(iceberg_table *table)
    if (!lock(&table->metadata.lock, TRY_ONCE_LOCK))
       return false;
 
-   if (unlikely(need_resize(table))) {
+   if (likely(!need_resize(table))) {
       unlock(&table->metadata.lock);
       return false;
    }
