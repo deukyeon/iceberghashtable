@@ -851,7 +851,7 @@ iceberg_setup_resize(iceberg_table *table)
    if (!lock(&table->metadata.lock, TRY_ONCE_LOCK))
       return false;
 
-   if (unlikely(!need_resize(table))) {
+   if (unlikely(need_resize(table))) {
       unlock(&table->metadata.lock);
       return false;
    }
@@ -1411,7 +1411,7 @@ iceberg_put_or_insert(iceberg_table *table,
                       bool           overwrite_value_if_exist)
 {
 #ifdef ENABLE_RESIZE
-   if (unlikely(need_resize(table))) {
+   if (likely(need_resize(table))) {
       iceberg_setup_resize(table);
    }
 #endif
