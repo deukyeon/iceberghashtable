@@ -1744,7 +1744,7 @@ iceberg_lv2_remove(iceberg_table *table,
              == 0)
          { // not fixed yet
             uint64_t old_bindex, old_boffset;
-            get_index_offset(table->metadata.log_init_size - 3,
+            get_index_offset(table->metadata.log_init_size,
                              old_index,
                              &old_bindex,
                              &old_boffset);
