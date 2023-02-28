@@ -127,7 +127,7 @@ iceberg_load_factor(iceberg_table *table);
 /**
  *
  * If there exists a key in the hash table, it increases its refcount by one
- * without updating the value. Otherwise, the value of 0 with the refcount of 1
+ * without updating the value. Otherwise, the value with the refcount of 1
  * is inserted.
  *
  * @return If a new item is inserted, it returns true. Otherwise,
@@ -154,9 +154,8 @@ iceberg_update(iceberg_table *table,
 
 /**
  *
- * If there exists a key in the hash table, it increases its refcount by one and
- * overwrites the value. Otherwise, the value of 0 with the refcount of 1 is
- * inserted.
+ * If there exists a key in the hash table, it increases its refcount
+ * by one and overwrites the value.
  *
  */
 bool
@@ -175,6 +174,9 @@ iceberg_remove_and_get_key(iceberg_table *table,
 
 bool
 iceberg_force_remove(iceberg_table *table, KeyType key, uint8_t thread_id);
+
+bool
+iceberg_decrease_refcount(iceberg_table *table, KeyType key, uint8_t thread_id);
 
 bool
 iceberg_get_value(iceberg_table *table,
@@ -198,6 +200,9 @@ iceberg_mount(iceberg_table *table, uint64_t log_slots, uint64_t resize_cnt);
 void
 iceberg_end(iceberg_table *table);
 #endif
+
+void
+iceberg_print_state(iceberg_table *table);
 
 #ifdef __cplusplus
 }
