@@ -862,7 +862,7 @@ iceberg_setup_resize(iceberg_table *table)
       return false;
    }
 
-   /* iceberg_print_state(table); */
+   iceberg_print_state(table);
 
 #   if defined(HUGE_TLB)
    int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB;
@@ -1865,8 +1865,8 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
                           &old_bindex,
                           &old_boffset);
 
-         lock_block(
-            (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
+         // lock_block(
+         //    (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
 
          __mmask64 md_mask = slot_mask_64(
             metadata->lv1_md[old_bindex][old_boffset].block_md, fprint);
@@ -1895,9 +1895,9 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
                   pc_add(&metadata->lv1_balls, -1, thread_id);
                   ret = true;
                } else if (blocks[old_boffset].slots[slot].val.refcount == 0) {
-                  unlock_block(
-                     (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
-                        .block_md);
+                  // unlock_block(
+                  //    (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
+                  //       .block_md);
                   return false;
                } else {
                   blocks[old_boffset].slots[slot].val.refcount--;
@@ -1905,9 +1905,9 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
 #   if PMEM
                pmem_persist(&blocks[old_boffset].slots[slot], sizeof(kv_pair));
 #   endif
-               unlock_block(
-                  (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
-                     .block_md);
+               // unlock_block(
+               //    (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
+               //       .block_md);
                return ret;
             }
          }
@@ -2222,10 +2222,10 @@ iceberg_get_value_internal(iceberg_table                  *table,
                           &old_bindex,
                           &old_boffset);
 
-         if (should_lock) {
-            lock_block(
-               (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
-         }
+         // if (should_lock) {
+         //    lock_block(
+         //       (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
+         // }
 
          __mmask64 md_mask = slot_mask_64(
             metadata->lv1_md[old_bindex][old_boffset].block_md, fprint);
@@ -2239,19 +2239,19 @@ iceberg_get_value_internal(iceberg_table                  *table,
                 == 0) {
                *value = &blocks[old_boffset].slots[slot].val;
 
-               if (should_lock) {
-                  unlock_block(
-                     (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
-                        .block_md);
-               }
+               // if (should_lock) {
+               //    unlock_block(
+               //       (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset]
+               //          .block_md);
+               // }
                return true;
             }
          }
 
-         if (should_lock) {
-            unlock_block(
-               (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
-         }
+         // if (should_lock) {
+         //    unlock_block(
+         //       (uint64_t *)&metadata->lv1_md[old_bindex][old_boffset].block_md);
+         // }
       } else {
          // wait for the old block to be fixed
          uint64_t dest_chunk_idx = index / 8;
