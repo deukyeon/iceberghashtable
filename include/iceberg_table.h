@@ -184,11 +184,6 @@ iceberg_get_value(iceberg_table *table,
                   ValueType    **value,
                   uint8_t        thread_id);
 
-bool
-iceberg_get_key_value(iceberg_table *table,
-                      KeyType       *key,
-                      ValueType    **value,
-                      uint8_t        thread_id);
 #ifdef PMEM
 uint64_t
 iceberg_dismount(iceberg_table *table);
