@@ -167,10 +167,15 @@ iceberg_put(iceberg_table *table,
 bool
 iceberg_remove(iceberg_table *table, KeyType key, uint8_t thread_id);
 
+
+/*
+ * Gets the key and the copy of the value before removing
+ */
 bool
-iceberg_remove_and_get_key(iceberg_table *table,
-                           KeyType       *key,
-                           uint8_t        thread_id);
+iceberg_get_and_remove(iceberg_table *table,
+                       KeyType       *key,
+                       ValueType     *value,
+                       uint8_t        thread_id);
 
 bool
 iceberg_force_remove(iceberg_table *table, KeyType key, uint8_t thread_id);

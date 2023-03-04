@@ -1684,6 +1684,7 @@ iceberg_lv3_remove(iceberg_table *table,
 static inline bool
 iceberg_lv2_remove(iceberg_table *table,
                    KeyType       *key,
+                   ValueType     *value,
                    uint64_t       lv3_index,
                    bool           delete_item,
                    bool           force_remove,
@@ -1736,13 +1737,17 @@ iceberg_lv2_remove(iceberg_table *table,
                if (iceberg_key_compare(blocks[old_boffset].slots[slot].key,
                                        *key)
                    == 0) {
+                  *key = blocks[old_boffset].slots[slot].key;
+                  if (value) {
+                     *value = blocks[old_boffset].slots[slot].val;
+                  }
+
                   if ((delete_item
                        && blocks[old_boffset].slots[slot].val.refcount == 1)
                       || force_remove)
                   {
                      metadata->lv2_md[old_bindex][old_boffset].block_md[slot] =
                         0;
-                     *key = blocks[old_boffset].slots[slot].key;
                      blocks[old_boffset].slots[slot].key          = NULL;
                      blocks[old_boffset].slots[slot].val.refcount = 0;
                      pc_add(&metadata->lv2_balls, -1, thread_id);
@@ -1789,13 +1794,18 @@ iceberg_lv2_remove(iceberg_table *table,
          uint8_t slot = word_select(md_mask, i);
 
          if (iceberg_key_compare(blocks[boffset].slots[slot].key, *key) == 0) {
+
+            *key = blocks[boffset].slots[slot].key;
+            if (value) {
+               *value = blocks[boffset].slots[slot].val;
+            }
+
             if ((delete_item && blocks[boffset].slots[slot].val.refcount == 1)
                 || force_remove)
             {
                metadata->lv2_md[bindex][boffset].block_md[slot] = 0;
-               *key = blocks[boffset].slots[slot].key;
-               blocks[boffset].slots[slot].key          = NULL;
-               blocks[boffset].slots[slot].val.refcount = 0;
+               blocks[boffset].slots[slot].key                  = NULL;
+               blocks[boffset].slots[slot].val.refcount         = 0;
                pc_add(&metadata->lv2_balls, -1, thread_id);
                ret = true;
             } else if (blocks[boffset].slots[slot].val.refcount == 0) {
@@ -1817,11 +1827,12 @@ iceberg_lv2_remove(iceberg_table *table,
 }
 
 static inline bool
-iceberg_remove_and_get_key_with_force(iceberg_table *table,
-                                      KeyType       *key,
+iceberg_get_and_remove_with_force(iceberg_table *table,
+                                  KeyType       *key,
+                                  ValueType     *value,
                                       bool           delete_item,
-                                      bool           force_remove,
-                                      uint8_t        thread_id)
+                                  bool           force_remove,
+                                  uint8_t        thread_id)
 {
    iceberg_metadata *metadata = &table->metadata;
    uint8_t           fprint;
@@ -1869,12 +1880,16 @@ iceberg_remove_and_get_key_with_force(iceberg_table *table,
 
             if (iceberg_key_compare(blocks[old_boffset].slots[slot].key, *key)
                 == 0) {
+               *key = blocks[old_boffset].slots[slot].key;
+               if (value) {
+                  *value = blocks[old_boffset].slots[slot].val;
+               }
+
                if ((delete_item
                     && blocks[old_boffset].slots[slot].val.refcount == 1)
                    || force_remove)
                {
                   metadata->lv1_md[old_bindex][old_boffset].block_md[slot] = 0;
-                  *key = blocks[old_boffset].slots[slot].key;
                   blocks[old_boffset].slots[slot].key          = NULL;
                   blocks[old_boffset].slots[slot].val.refcount = 0;
                   pc_add(&metadata->lv1_balls, -1, thread_id);
@@ -1923,13 +1938,17 @@ iceberg_remove_and_get_key_with_force(iceberg_table *table,
       uint8_t slot = word_select(md_mask, i);
 
       if (iceberg_key_compare(blocks[boffset].slots[slot].key, *key) == 0) {
+         *key = blocks[boffset].slots[slot].key;
+         if (value) {
+            *value = blocks[boffset].slots[slot].val;
+         }
+
          if ((delete_item && blocks[boffset].slots[slot].val.refcount == 1)
              || force_remove)
          {
             metadata->lv1_md[bindex][boffset].block_md[slot] = 0;
-            *key                            = blocks[boffset].slots[slot].key;
-            blocks[boffset].slots[slot].key = NULL;
-            blocks[boffset].slots[slot].val.refcount = 0;
+            blocks[boffset].slots[slot].key                  = NULL;
+            blocks[boffset].slots[slot].val.refcount         = 0;
             pc_add(&metadata->lv1_balls, -1, thread_id);
             ret = true;
          } else if (blocks[boffset].slots[slot].val.refcount == 0) {
@@ -1948,7 +1967,7 @@ iceberg_remove_and_get_key_with_force(iceberg_table *table,
    }
 
    ret = iceberg_lv2_remove(
-      table, key, index, delete_item, force_remove, thread_id);
+      table, key, value, index, delete_item, force_remove, thread_id);
 
    unlock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
    return ret;
@@ -1957,31 +1976,34 @@ iceberg_remove_and_get_key_with_force(iceberg_table *table,
 __attribute__((always_inline)) bool
 iceberg_remove(iceberg_table *table, KeyType key, uint8_t thread_id)
 {
-   return iceberg_remove_and_get_key_with_force(
-      table, &key, true, false, thread_id);
+   return iceberg_get_and_remove_with_force(
+      
+      table, &key, NULL, true, false, thread_id);
 }
 
 __attribute__((always_inline)) bool
-iceberg_remove_and_get_key(iceberg_table *table,
-                           KeyType       *key,
-                           uint8_t        thread_id)
+iceberg_get_and_remove(iceberg_table *table,
+                       KeyType       *key,
+                       ValueType     *value,
+                       uint8_t        thread_id)
 {
-   return iceberg_remove_and_get_key_with_force(
-      table, key, true, false, thread_id);
+   return iceberg_get_and_remove_with_force(
+      
+      table, key, value, true, false, thread_id);
 }
 
 __attribute__((always_inline)) bool
 iceberg_force_remove(iceberg_table *table, KeyType key, uint8_t thread_id)
 {
-   return iceberg_remove_and_get_key_with_force(
-      table, &key, true, true, thread_id);
+   return iceberg_get_and_remove_with_force(
+      table, &key, NULL, true, true, thread_id);
 }
 
 __attribute__((always_inline)) bool
 iceberg_decrease_refcount(iceberg_table *table, KeyType key, uint8_t thread_id)
 {
-   return iceberg_remove_and_get_key_with_force(
-      table, &key, false, false, thread_id);
+   return iceberg_get_and_remove_with_force(
+      table, &key, NULL, false, false, thread_id);
 }
 
 
