@@ -22,14 +22,18 @@ extern "C" {
 
 typedef char *KeyType;
 
-typedef struct {
-   uint64_t refcount : 6;
-   uint64_t value : 58;
-} ValueType;
+// typedef struct {
+//    uint64_t value : 58;
+//    uint64_t refcount : 6;
+// } ValueType;
 
-typedef struct __attribute__((__packed__)) kv_pair {
+typedef uint64_t ValueType;
+
+// typedef struct __attribute__((__packed__)) kv_pair {
+typedef struct kv_pair {
    KeyType   key;
    ValueType val;
+   uint64_t  refcount;
 } kv_pair;
 
 typedef struct __attribute__((__packed__)) iceberg_lv1_block {
@@ -49,15 +53,14 @@ typedef struct __attribute__((__packed__)) iceberg_lv2_block_md {
 } iceberg_lv2_block_md;
 
 typedef struct iceberg_lv3_node {
-   KeyType   key;
-   ValueType val;
+   kv_pair kv;
 #ifdef PMEM
    bool      in_use;
    ptrdiff_t next_idx;
 #else
    struct iceberg_lv3_node *next_node;
 #endif
-} iceberg_lv3_node;
+} iceberg_lv3_node __attribute__((aligned(64)));
 
 typedef struct iceberg_lv3_list {
 #ifdef PMEM
@@ -139,6 +142,18 @@ iceberg_insert(iceberg_table *table,
                KeyType        key,
                ValueType      value,
                uint8_t        thread_id);
+
+/**
+ *
+ * If there exists a key in the hash table, it does nothing. Otherwise, the
+ * value with the refcount of 1 is inserted.
+ *
+ */
+bool
+iceberg_insert_without_increasing_refcount(iceberg_table *table,
+                                           KeyType        key,
+                                           ValueType      value,
+                                           uint8_t        thread_id);
 
 /**
  *
