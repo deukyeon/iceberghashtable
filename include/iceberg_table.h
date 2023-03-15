@@ -158,18 +158,18 @@ iceberg_insert_without_increasing_refcount(iceberg_table *table,
 /**
  * The following functions do the same thing as the above functions,
  * but it returns the pointer of the value.
-*/
+ */
 bool
 iceberg_insert_and_get(iceberg_table *table,
-               KeyType        key,
-               ValueType      **value,
-               uint8_t        thread_id);
+                       KeyType        key,
+                       ValueType    **value,
+                       uint8_t        thread_id);
 
 bool
 iceberg_insert_and_get_without_increasing_refcount(iceberg_table *table,
-                                           KeyType        key,
-                                           ValueType      **value,
-                                           uint8_t        thread_id);
+                                                   KeyType        key,
+                                                   ValueType    **value,
+                                                   uint8_t        thread_id);
 
 /**
  *
