@@ -156,6 +156,22 @@ iceberg_insert_without_increasing_refcount(iceberg_table *table,
                                            uint8_t        thread_id);
 
 /**
+ * The following functions do the same thing as the above functions,
+ * but it returns the pointer of the value.
+*/
+bool
+iceberg_insert_and_get(iceberg_table *table,
+               KeyType        key,
+               ValueType      **value,
+               uint8_t        thread_id);
+
+bool
+iceberg_insert_and_get_without_increasing_refcount(iceberg_table *table,
+                                           KeyType        key,
+                                           ValueType      **value,
+                                           uint8_t        thread_id);
+
+/**
  *
  * If there exists a key in the hash table, it just overwrites the value without
  * increasing the refcount. Otherwise, it does nothing.

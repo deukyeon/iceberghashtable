@@ -1437,7 +1437,7 @@ iceberg_get_value_internal(iceberg_table *table,
 static bool
 iceberg_put_or_insert(iceberg_table *table,
                       KeyType        key,
-                      ValueType      value,
+                      ValueType      **value,
                       uint8_t        thread_id,
                       bool           increase_refcount,
                       bool           overwrite_value_if_exist)
@@ -1490,8 +1490,15 @@ iceberg_put_or_insert(iceberg_table *table,
    uint64_t bindex, boffset;
    get_index_offset(table->metadata.log_init_size, index, &bindex, &boffset);
 
+   // struct timespec before_lock, after_lock, unlock;
+   // clock_gettime(CLOCK_MONOTONIC, &before_lock);
+
    lock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
-   kv_pair *kv;
+   
+   // clock_gettime(CLOCK_MONOTONIC, &after_lock);
+   // printf("tid %d: %s before_lock - after_lock: %lu ns\n", thread_id, __func__, (after_lock.tv_sec - before_lock.tv_sec) * 1000000000 + (after_lock.tv_nsec - before_lock.tv_nsec));
+
+   kv_pair *kv = NULL;
    if (unlikely(iceberg_get_value_internal(table, key, &kv, thread_id, false)))
    {
       // printf("tid %d %p %s %s previous refcount: %d\n", thread_id, (void
@@ -1501,11 +1508,17 @@ iceberg_put_or_insert(iceberg_table *table,
          kv->refcount++;
       }
       if (overwrite_value_if_exist) {
-         kv->val = value;
+         kv->val = **value;
       }
+
+      *value = &kv->val;
 
       // printf("tid %d %p %s %s refcount: %d\n", thread_id, (void *)table,
       // __func__, key, v->refcount);
+
+      // clock_gettime(CLOCK_MONOTONIC, &unlock);
+      // printf("tid %d: %s after_lock ~ unlock:  %lu ns\n", thread_id, __func__, (unlock.tv_sec - after_lock.tv_sec) * 1000000000 + (unlock.tv_nsec - after_lock.tv_nsec));
+      // printf("tid %d: %s before_lock ~ unlock:  %lu ns\n", thread_id, __func__, (unlock.tv_sec - before_lock.tv_sec) * 1000000000 + (unlock.tv_nsec - before_lock.tv_nsec));
 
       /*printf("Found!\n");*/
       unlock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
@@ -1515,9 +1528,18 @@ iceberg_put_or_insert(iceberg_table *table,
    const uint64_t refcount = 1;
 
    bool ret = iceberg_insert_internal(
-      table, key, value, refcount, fprint, bindex, boffset, thread_id);
+      table, key, **value, refcount, fprint, bindex, boffset, thread_id);
    if (!ret)
-      ret = iceberg_lv2_insert(table, key, value, refcount, index, thread_id);
+      ret = iceberg_lv2_insert(table, key, **value, refcount, index, thread_id);
+
+   if (ret) {
+      iceberg_get_value_internal(table, key, &kv, thread_id, false);
+      *value = &kv->val;
+   }
+
+   // clock_gettime(CLOCK_MONOTONIC, &unlock);
+   // printf("tid %d: %s new_item after_lock ~ unlock:  %lu ns\n", thread_id, __func__, (unlock.tv_sec - after_lock.tv_sec) * 1000000000 + (unlock.tv_nsec - after_lock.tv_nsec));
+   // printf("tid %d: %s new_item before_lock ~ unlock:  %lu ns\n", thread_id, __func__, (unlock.tv_sec - before_lock.tv_sec) * 1000000000 + (unlock.tv_nsec - before_lock.tv_nsec));
 
    // printf("tid %d %p %s %s is newly inserted\n", thread_id, (void *)table,
    // __func__, key);
@@ -1532,7 +1554,8 @@ iceberg_insert(iceberg_table *table,
                uint8_t        thread_id)
 {
    // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
-   return iceberg_put_or_insert(table, key, value, thread_id, true, false);
+   ValueType *value_ptr = &value;
+   return iceberg_put_or_insert(table, key, &value_ptr, thread_id, true, false);
 }
 
 __attribute__((always_inline)) bool
@@ -1542,8 +1565,49 @@ iceberg_insert_without_increasing_refcount(iceberg_table *table,
                                            uint8_t        thread_id)
 {
    // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
+   ValueType *value_ptr = &value;
+   return iceberg_put_or_insert(table, key, &value_ptr, thread_id, false, false);
+}
+
+__attribute__((always_inline)) bool
+iceberg_insert_and_get(iceberg_table *table,
+               KeyType        key,
+               ValueType      **value,
+               uint8_t        thread_id)
+{
+   // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
+   return iceberg_put_or_insert(table, key, value, thread_id, true, false);
+}
+
+__attribute__((always_inline)) bool
+iceberg_insert_and_get_without_increasing_refcount(iceberg_table *table,
+                                           KeyType        key,
+                                           ValueType      **value,
+                                           uint8_t        thread_id)
+{
+   // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
    return iceberg_put_or_insert(table, key, value, thread_id, false, false);
 }
+
+// __attribute__((always_inline)) bool
+// iceberg_insert_and_get(iceberg_table *table,
+//                KeyType        key,
+//                ValueType      value,
+//                uint8_t        thread_id)
+// {
+//    // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
+//    return iceberg_put_or_insert(table, key, value, thread_id, true, false);
+// }
+
+// __attribute__((always_inline)) bool
+// iceberg_insert_and_get_without_increasing_refcount(iceberg_table *table,
+//                                            KeyType        key,
+//                                            ValueType      value,
+//                                            uint8_t        thread_id)
+// {
+//    // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
+//    return iceberg_put_or_insert(table, key, value, thread_id, false, false);
+// }
 
 bool
 iceberg_update(iceberg_table *table,
@@ -1581,7 +1645,8 @@ iceberg_put(iceberg_table *table,
             ValueType      value,
             uint8_t        thread_id)
 {
-   return iceberg_put_or_insert(table, key, value, thread_id, true, true);
+   ValueType *value_ptr = &value;
+   return iceberg_put_or_insert(table, key, &value_ptr, thread_id, true, true);
 }
 
 
