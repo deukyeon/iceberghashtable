@@ -287,7 +287,7 @@ static uint64_t iceberg_block_load(iceberg_table * table, uint64_t index, uint8_
     return table->metadata.lv3_sizes[bindex][boffset];
 }
 
-static uint64_t iceberg_table_load(iceberg_table * table) {
+static uint64_t __attribute__((unused)) iceberg_table_load(iceberg_table * table) {
   uint64_t total = 0;
 
   for (uint8_t i = 1; i <= 3; ++i) {
@@ -299,7 +299,7 @@ static uint64_t iceberg_table_load(iceberg_table * table) {
   return total;
 }
 
-static double iceberg_block_load_factor(iceberg_table * table, uint64_t index, uint8_t level) {
+static double __attribute__((unused)) iceberg_block_load_factor(iceberg_table * table, uint64_t index, uint8_t level) {
   if (level == 1)
     return iceberg_block_load(table, index, level) / (double)(1ULL << SLOT_BITS);
   else if (level == 2)
@@ -308,7 +308,7 @@ static double iceberg_block_load_factor(iceberg_table * table, uint64_t index, u
     return iceberg_block_load(table, index, level);
 }
 
-static inline size_t round_up(size_t n, size_t k) {
+static inline size_t __attribute__((unused)) round_up(size_t n, size_t k) {
   size_t rem = n % k;
   if (rem == 0) {
     return n;
