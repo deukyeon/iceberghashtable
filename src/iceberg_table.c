@@ -221,24 +221,50 @@ unlock_block(uint64_t *metadata)
 #endif
 }
 
-static inline uint32_t
-slot_mask_32(uint8_t *metadata, uint8_t fprint)
-{
-   __m256i bcast = _mm256_set1_epi8(fprint);
-   __m256i block = _mm256_loadu_si256((const __m256i *)(metadata));
-   return _mm256_cmp_epi8_mask(bcast, block, _MM_CMPINT_EQ);
+static inline uint32_t slot_mask_32(uint8_t * metadata, uint8_t fprint) {
+  __m256i bcast = _mm256_set1_epi8(fprint);
+  __m256i block = _mm256_loadu_si256((const __m256i *)(metadata));
+#if defined __AVX512BW__ && defined __AVX512VL__
+  return _mm256_cmp_epi8_mask(bcast, block, _MM_CMPINT_EQ);
+#else
+  __m256i cmp = _mm256_cmpeq_epi8(bcast, block);
+  return _mm256_movemask_epi8(cmp);
+#endif
 }
 
-static inline uint64_t
-slot_mask_64(uint8_t *metadata, uint8_t fprint)
-{
-   __m512i mask  = _mm512_loadu_si512((const __m512i *)(broadcast_mask));
-   __m512i bcast = _mm512_set1_epi8(fprint);
-   bcast         = _mm512_or_epi64(bcast, mask);
-   __m512i block = _mm512_loadu_si512((const __m512i *)(metadata));
-   block         = _mm512_or_epi64(block, mask);
-   return _mm512_cmp_epi8_mask(bcast, block, _MM_CMPINT_EQ);
+#if defined __AVX512F__ && defined __AVX512BW__
+static inline uint64_t slot_mask_64(uint8_t * metadata, uint8_t fprint) {
+  __m512i mask = _mm512_loadu_si512((const __m512i *)(broadcast_mask));
+  __m512i bcast = _mm512_set1_epi8(fprint);
+  bcast = _mm512_or_epi64(bcast, mask);
+  __m512i block = _mm512_loadu_si512((const __m512i *)(metadata));
+  block = _mm512_or_epi64(block, mask);
+  return _mm512_cmp_epi8_mask(bcast, block, _MM_CMPINT_EQ);
 }
+#else /* ! (defined __AVX512F__ && defined __AVX512BW__) */
+static inline uint32_t slot_mask_64_half(__m256i fprint, __m256i md, __m256i mask)
+{
+  __m256i masked_fp = _mm256_or_si256(fprint, mask);
+  __m256i masked_md = _mm256_or_si256(md, mask);
+  __m256i cmp       = _mm256_cmpeq_epi8(masked_md, masked_fp);
+  return _mm256_movemask_epi8(cmp);
+}
+
+static inline uint64_t slot_mask_64(uint8_t * metadata, uint8_t fp) {
+  __m256i fprint   = _mm256_set1_epi8(fp);
+
+  __m256i  md1     = _mm256_loadu_si256((const __m256i *)(metadata));
+  __m256i  mask1   = _mm256_loadu_si256((const __m256i *)(broadcast_mask));
+  uint64_t result1 = slot_mask_64_half(fprint, md1, mask1);
+
+  __m256i  md2     = _mm256_loadu_si256((const __m256i *)(&metadata[32]));
+  __m256i  mask2   = _mm256_loadu_si256((const __m256i *)(&broadcast_mask[32]));
+  uint64_t result2 = slot_mask_64_half(fprint, md2, mask2);
+
+  return ((uint64_t)result2 << 32) | result1;
+}
+#endif /* ! (defined __AVX512F__ && defined __AVX512BW__) */
+
 
 static inline void __attribute__((unused))
 atomic_write_128(KeyType key, ValueType val, uint64_t *slot)
@@ -248,10 +274,51 @@ atomic_write_128(KeyType key, ValueType val, uint64_t *slot)
    _mm_store_pd((double *)slot, a);
 }
 
-int
-iceberg_init(iceberg_table *table, uint64_t log_slots)
-{
-   memset(table, 0, sizeof(*table));
+static uint64_t iceberg_block_load(iceberg_table * table, uint64_t index, uint8_t level) {
+  uint64_t bindex, boffset;
+  get_index_offset(table->metadata.log_init_size, index, &bindex, &boffset);
+  if (level == 1) {
+    __mmask64 mask64 = slot_mask_64(table->metadata.lv1_md[bindex][boffset].block_md, 0);
+    return (1ULL << SLOT_BITS) - __builtin_popcountll(mask64);
+  } else if (level == 2) {
+    __mmask32 mask32 = slot_mask_32(table->metadata.lv2_md[bindex][boffset].block_md, 0) & ((1 << (C_LV2 + MAX_LG_LG_N / D_CHOICES)) - 1);
+    return (C_LV2 + MAX_LG_LG_N / D_CHOICES) - __builtin_popcountll(mask32);
+  } else
+    return table->metadata.lv3_sizes[bindex][boffset];
+}
+
+static uint64_t iceberg_table_load(iceberg_table * table) {
+  uint64_t total = 0;
+
+  for (uint8_t i = 1; i <= 3; ++i) {
+    for (uint64_t j = 0; j < table->metadata.nblocks; ++j) {
+      total += iceberg_block_load(table, j, i); 
+    }
+  }
+
+  return total;
+}
+
+static double iceberg_block_load_factor(iceberg_table * table, uint64_t index, uint8_t level) {
+  if (level == 1)
+    return iceberg_block_load(table, index, level) / (double)(1ULL << SLOT_BITS);
+  else if (level == 2)
+    return iceberg_block_load(table, index, level) / (double)(C_LV2 + MAX_LG_LG_N / D_CHOICES);
+  else
+    return iceberg_block_load(table, index, level);
+}
+
+static inline size_t round_up(size_t n, size_t k) {
+  size_t rem = n % k;
+  if (rem == 0) {
+    return n;
+  }
+  n += k - rem;
+  return n;
+}
+
+int iceberg_init(iceberg_table *table, uint64_t log_slots) {
+  memset(table, 0, sizeof(*table));
 
    uint64_t total_blocks = 1 << (log_slots - SLOT_BITS);
    uint64_t total_size_in_bytes =
