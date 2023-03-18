@@ -27,7 +27,8 @@ typedef char *KeyType;
 //    uint64_t refcount : 6;
 // } ValueType;
 
-typedef uint64_t ValueType;
+// typedef uint64_t ValueType;
+typedef unsigned __int128 ValueType;
 
 // typedef struct __attribute__((__packed__)) kv_pair {
 typedef struct kv_pair {
