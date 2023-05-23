@@ -39,7 +39,7 @@ CC = clang
 CPP = clang++
 CFLAGS = $(OPT) -Wall -Wextra -march=native -pthread $(HUGE) -Werror -Wfatal-errors -fPIC
 INCLUDE = -I ./include
-SOURCES = src/iceberg_table.c src/hashutil.c src/partitioned_counter.c src/lock.c
+SOURCES = src/iceberg_table.c src/hashutil.c src/partitioned_counter.c src/lock.c src/sketch.c
 OBJECTS = $(subst src/,obj/,$(subst .c,.o,$(SOURCES)))
 LIBS = -lssl -lcrypto -ltbb
 
@@ -48,7 +48,7 @@ INCLUDE += -I ./pmdk/src/PMDK/src/include
 LIBS +=  -L ./pmdk/src/PMDK/src/nondebug -lpmem -lpmemobj
 endif
 
-all: main libiceberghashtable.so
+all: main libiceberghashtable.so sketch_test
 
 obj/%.o: src/%.c
 	@ mkdir -p obj
@@ -61,6 +61,10 @@ obj/main.o: main.cc
 obj/ycsb.o: ycsb.cc
 	@ mkdir -p obj
 	$(CPP) $(CFLAGS) $(INCLUDE) -c $< -o $@
+	
+obj/sketch_test.o: sketch_test.cc
+	@ mkdir -p obj
+	$(CPP) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 main: $(OBJECTS) obj/main.o
 	$(CPP) $(CFLAGS) $^ -o $@ $(LIBS)
@@ -70,8 +74,11 @@ ycsb: $(OBJECTS) obj/ycsb.o
 
 libiceberghashtable.so: $(OBJECTS)
 	$(CC) $(CFLAGS) $^ -shared -o $@ $(LIBS)
+	
+sketch_test: $(OBJECTS) obj/sketch_test.o
+	$(CPP) $(CFLAGS) $^ -o $@ $(LIBS)
 
 .PHONY: clean directories
 
 clean:
-	rm -f main ycsb libiceberghashtable.so $(OBJECTS) obj/main.o obj/ycsb.o
+	rm -f main ycsb sketch_test libiceberghashtable.so $(OBJECTS) obj/main.o obj/ycsb.o obj/sketch_test.o

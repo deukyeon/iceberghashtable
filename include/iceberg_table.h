@@ -1,10 +1,9 @@
 #ifndef _POTC_TABLE_H_
 #define _POTC_TABLE_H_
 
-#include <inttypes.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include "lock.h"
+#include "types.h"
+#include "sketch.h"
 
 #ifdef __cplusplus
 #   define __restrict__
@@ -17,18 +16,6 @@ extern "C" {
 #define MAX_LG_LG_N 4
 #define C_LV2       6
 #define MAX_RESIZES 32
-
-#define KEY_SIZE 24
-
-typedef char *KeyType;
-
-// typedef struct {
-//    uint64_t value : 58;
-//    uint64_t refcount : 6;
-// } ValueType;
-
-// typedef uint64_t ValueType;
-typedef unsigned __int128 ValueType;
 
 // typedef struct __attribute__((__packed__)) kv_pair {
 typedef struct kv_pair {
@@ -111,6 +98,7 @@ typedef struct iceberg_table {
 #ifdef PMEM
    iceberg_lv3_node *level3_nodes;
 #endif
+   sketch *sktch;
 } iceberg_table;
 
 uint64_t
@@ -124,6 +112,11 @@ tot_balls(iceberg_table *table);
 
 int
 iceberg_init(iceberg_table *table, uint64_t log_slots);
+int
+iceberg_init_with_sketch(iceberg_table *table,
+                         uint64_t       log_slots,
+                         uint64_t       rows,
+                         uint64_t       cols);
 
 double
 iceberg_load_factor(iceberg_table *table);

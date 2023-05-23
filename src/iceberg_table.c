@@ -573,6 +573,20 @@ iceberg_init(iceberg_table *table, uint64_t log_slots)
    return 0;
 }
 
+int
+iceberg_init_with_sketch(iceberg_table *table,
+                         uint64_t       log_slots,
+                         uint64_t       rows,
+                         uint64_t       cols)
+{
+   iceberg_init(table, log_slots);
+
+   table->sktch = (sketch *)calloc(sizeof(sketch), 1);
+   sketch_init(rows, cols, table->sktch);
+
+   return 0;
+}
+
 #if PMEM
 uint64_t
 iceberg_dismount(iceberg_table *table)
@@ -1519,7 +1533,8 @@ iceberg_get_value_internal(iceberg_table *table,
                            KeyType        key,
                            kv_pair      **kv,
                            uint8_t        thread_id,
-                           bool           should_lock);
+                           bool           should_lock,
+                           bool           should_lookup_sketch);
 
 static bool
 iceberg_put_or_insert(iceberg_table *table,
@@ -1588,10 +1603,11 @@ iceberg_put_or_insert(iceberg_table *table,
    // (after_lock.tv_nsec - before_lock.tv_nsec));
 
    kv_pair *kv = NULL;
-   if (unlikely(iceberg_get_value_internal(table, key, &kv, thread_id, false)))
+   if (unlikely(
+          iceberg_get_value_internal(table, key, &kv, thread_id, false, false)))
    {
-      // printf("tid %d %p %s %s previous refcount: %d\n", thread_id, (void
-      // *)table, __func__, key, v->refcount);
+      // printf("tid %d %p %s %s previous refcount: %lu\n", thread_id, (void
+      // *)table, __func__, key, kv->refcount);
 
       if (increase_refcount) {
          kv->refcount++;
@@ -1626,7 +1642,7 @@ iceberg_put_or_insert(iceberg_table *table,
       ret = iceberg_lv2_insert(table, key, **value, refcount, index, thread_id);
 
    if (ret) {
-      iceberg_get_value_internal(table, key, &kv, thread_id, false);
+      iceberg_get_value_internal(table, key, &kv, thread_id, false, false);
       *value = &kv->val;
    }
 
@@ -1726,7 +1742,9 @@ iceberg_update(iceberg_table *table,
    lock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
 
    kv_pair *kv;
-   if (likely(iceberg_get_value_internal(table, key, &kv, thread_id, false))) {
+   if (likely(
+          iceberg_get_value_internal(table, key, &kv, thread_id, false, false)))
+   {
       kv->val = value;
       /*printf("Found!\n");*/
       unlock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
@@ -1788,6 +1806,11 @@ iceberg_lv3_remove_internal(iceberg_table *table,
       // printf("tid %d %p %s %s previous head refcount: %d\n", thread_id, (void
       // *)table, __func__, *key, head->val.refcount);
       if (force_remove || (delete_item && head->kv.refcount == 1)) {
+         // If it has a sketch, insert the removed value to it.
+         if (table->sktch) {
+            sketch_insert(table->sktch, head->kv.key, head->kv.val);
+         }
+
          *key = head->kv.key;
          iceberg_lv3_node *old_head = lists[boffset].head;
          lists[boffset].head = lists[boffset].head->next_node;
@@ -1828,6 +1851,11 @@ iceberg_lv3_remove_internal(iceberg_table *table,
          // (void *)table, __func__, *key, next_node->val.refcount);
 
          if (force_remove || (delete_item && next_node->kv.refcount == 1)) {
+            // If it has a sketch, insert the removed value to it.
+            if (table->sktch) {
+               sketch_insert(table->sktch, head->kv.key, head->kv.val);
+            }
+
             *key = next_node->kv.key;
             iceberg_lv3_node *old_node = current_node->next_node;
             current_node->next_node = current_node->next_node->next_node;
@@ -1977,6 +2005,13 @@ iceberg_lv2_remove(iceberg_table *table,
                       || (delete_item
                           && blocks[old_boffset].slots[slot].refcount == 1))
                   {
+                     // If it has a sketch, insert the removed value to it.
+                     if (table->sktch) {
+                        sketch_insert(table->sktch,
+                                      blocks[old_boffset].slots[slot].key,
+                                      blocks[old_boffset].slots[slot].val);
+                     }
+
                      metadata->lv2_md[old_bindex][old_boffset].block_md[slot] =
                         0;
                      blocks[old_boffset].slots[slot].key      = NULL;
@@ -2036,6 +2071,12 @@ iceberg_lv2_remove(iceberg_table *table,
 
             if (force_remove
                 || (delete_item && blocks[boffset].slots[slot].refcount == 1)) {
+               // If it has a sketch, insert the removed value to it.
+               if (table->sktch) {
+                  sketch_insert(table->sktch,
+                                blocks[boffset].slots[slot].key,
+                                blocks[boffset].slots[slot].val);
+               }
                metadata->lv2_md[bindex][boffset].block_md[slot] = 0;
                blocks[boffset].slots[slot].key                  = NULL;
                blocks[boffset].slots[slot].refcount             = 0;
@@ -2129,6 +2170,12 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
                    || (delete_item
                        && blocks[old_boffset].slots[slot].refcount == 1))
                {
+                  // If it has a sketch, insert the removed value to it.
+                  if (table->sktch) {
+                     sketch_insert(table->sktch,
+                                   blocks[old_boffset].slots[slot].key,
+                                   blocks[old_boffset].slots[slot].val);
+                  }
                   metadata->lv1_md[old_bindex][old_boffset].block_md[slot] = 0;
                   blocks[old_boffset].slots[slot].key      = NULL;
                   blocks[old_boffset].slots[slot].refcount = 0;
@@ -2181,8 +2228,8 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
       uint8_t slot = word_select(md_mask, i);
 
       if (iceberg_key_compare(blocks[boffset].slots[slot].key, *key) == 0) {
-         // printf("tid %d %p %s %s before decreasing %d\n", thread_id, (void
-         // *)table, __func__, *key, blocks[boffset].slots[slot].val.refcount);
+         // printf("tid %d %p %s %s before decreasing %lu\n", thread_id, (void
+         // *)table, __func__, *key, blocks[boffset].slots[slot].refcount);
 
          *key = blocks[boffset].slots[slot].key;
          if (value) {
@@ -2191,6 +2238,12 @@ iceberg_get_and_remove_with_force(iceberg_table *table,
 
          if (force_remove
              || (delete_item && blocks[boffset].slots[slot].refcount == 1)) {
+            // If it has a sketch, insert the removed value to it.
+            if (table->sktch) {
+               sketch_insert(table->sktch,
+                             blocks[boffset].slots[slot].key,
+                             blocks[boffset].slots[slot].val);
+            }
             metadata->lv1_md[bindex][boffset].block_md[slot] = 0;
             blocks[boffset].slots[slot].key                  = NULL;
             blocks[boffset].slots[slot].refcount             = 0;
@@ -2446,11 +2499,76 @@ iceberg_lv2_get_value(iceberg_table *table,
 }
 
 static bool
+iceberg_put_nolock(iceberg_table *table,
+                   KeyType        key,
+                   ValueType      value,
+                   uint8_t        thread_id)
+{
+#ifdef ENABLE_RESIZE
+   if (unlikely(need_resize(table))) {
+      iceberg_setup_resize(table);
+   }
+#endif
+
+   iceberg_metadata *metadata = &table->metadata;
+   uint8_t           fprint;
+   uint64_t          index;
+
+   split_hash(lv1_hash(key), &fprint, &index, metadata);
+
+#ifdef ENABLE_RESIZE
+   // move blocks if resize is active and not already moved.
+   if (unlikely(index < (table->metadata.nblocks >> 1)
+                && is_lv1_resize_active(table)))
+   {
+      uint64_t chunk_idx = index / 8;
+      uint64_t mindex, moffset;
+      get_index_offset(
+         table->metadata.log_init_size - 3, chunk_idx, &mindex, &moffset);
+      // if fixing is needed set the marker
+      if (!__sync_lock_test_and_set(
+             &table->metadata.lv1_resize_marker[mindex][moffset], 1))
+      {
+         for (uint8_t i = 0; i < 8; ++i) {
+            uint64_t idx = chunk_idx * 8 + i;
+            /*printf("LV1 Before: Moving block: %ld load: %f\n", idx,
+             * iceberg_block_load(table, idx, 1));*/
+            iceberg_lv1_move_block(table, idx, thread_id);
+            /*printf("LV1 After: Moving block: %ld load: %f\n", idx,
+             * iceberg_block_load(table, idx, 1));*/
+         }
+         // set the marker for the dest block
+         uint64_t dest_chunk_idx = chunk_idx + table->metadata.nblocks / 8 / 2;
+         uint64_t mindex, moffset;
+         get_index_offset(table->metadata.log_init_size - 3,
+                          dest_chunk_idx,
+                          &mindex,
+                          &moffset);
+         __sync_lock_test_and_set(
+            &table->metadata.lv1_resize_marker[mindex][moffset], 1);
+      }
+   }
+#endif
+   uint64_t bindex, boffset;
+   get_index_offset(table->metadata.log_init_size, index, &bindex, &boffset);
+
+   const uint64_t refcount = 1;
+
+   bool ret = iceberg_insert_internal(
+      table, key, value, refcount, fprint, bindex, boffset, thread_id);
+   if (!ret)
+      ret = iceberg_lv2_insert(table, key, value, refcount, index, thread_id);
+
+   return ret;
+}
+
+static bool
 iceberg_get_value_internal(iceberg_table                  *table,
                            KeyType                         key,
                            kv_pair                       **kv,
                            __attribute__((unused)) uint8_t thread_id,
-                           bool                            should_lock)
+                           bool                            should_lock,
+                           bool                            should_lookup_sketch)
 {
    iceberg_metadata *metadata = &table->metadata;
 
@@ -2568,6 +2686,18 @@ iceberg_get_value_internal(iceberg_table                  *table,
    // printf("tid %d %p %s %s %s\n", thread_id, (void *)table, __func__, key ,
    // ret ? "Found in lv2" : "Not found");
 
+   // If there is a sketch and the key is not found, insert the key
+   // and the value which is from the sketch into the table. Then,
+   // it should return true.
+   if (should_lookup_sketch && table->sktch) {
+      if (!ret) {
+         ValueType value_from_sketch = sketch_get(table->sktch, key);
+         iceberg_put_nolock(table, key, value_from_sketch, thread_id);
+         ret =
+            iceberg_get_value_internal(table, key, kv, thread_id, false, false);
+      }
+   }
+
    if (should_lock) {
       unlock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
    }
@@ -2582,8 +2712,9 @@ iceberg_get_value(iceberg_table *table,
 {
    // printf("tid %d %p %s %s\n", thread_id, (void *)table, __func__, key);
    kv_pair *kv = NULL;
-   bool found  = iceberg_get_value_internal(table, key, &kv, thread_id, true);
-   *value      = &kv->val;
+   bool     found =
+      iceberg_get_value_internal(table, key, &kv, thread_id, true, true);
+   *value = &kv->val;
    return found;
 }
 
