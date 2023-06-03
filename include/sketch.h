@@ -30,9 +30,12 @@ sketch_insert(sketch *sktch, KeyType key, ValueType value);
 ValueType
 sketch_get(sketch *sktch, KeyType key);
 
-
-#define MAX(x, y) ((x) > (y) ? (x) : (y))
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
+#ifndef MAX
+#   define MAX(x, y) ((x) > (y) ? (x) : (y))
+#endif
+#ifndef MIN
+#   define MIN(x, y) ((x) < (y) ? (x) : (y))
+#endif
 
 #ifdef __cplusplus
 }
