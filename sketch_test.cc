@@ -42,7 +42,7 @@ int test_iceberg_sketch() {
     for (uint64_t r = 0; r < table.sktch->rows; ++r) {
         for (uint64_t c = 0; c < table.sktch->cols; ++c) {
             uint64_t i = r * table.sktch->cols + c;
-            std::cout << (uint64_t)table.sktch->table[i] << " ";
+            std::cout << (uint64_t)table.sktch->table[i].value << " ";
         }
         std::cout << "\n";
     }

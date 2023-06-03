@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include <stdio.h>
+#include <immintrin.h>
 
 void
 sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
@@ -17,8 +18,8 @@ sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
    sktch->cols = cols;
 
    sktch->table =
-      (ValueType *)mmap(NULL,
-                        sktch->rows * sktch->cols * sizeof(ValueType),
+      (sketch_item *)mmap(NULL,
+                        sktch->rows * sktch->cols * sizeof(sketch_item),
                         PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                         0,
@@ -48,7 +49,7 @@ sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
 void
 sketch_deinit(sketch *sktch)
 {
-   munmap(sktch->table, sktch->rows * sktch->cols * sizeof(ValueType));
+   munmap(sktch->table, sktch->rows * sktch->cols * sizeof(sketch_item));
    munmap(sktch->hashes, sktch->rows * sizeof(unsigned int));
 }
 
@@ -64,13 +65,30 @@ get_index_in_row(sketch *sktch, KeyType key, uint64_t row)
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
+
+static inline void
+lock(bool *lck)
+{
+   while (__atomic_test_and_set(lck, __ATOMIC_ACQUIRE)) {
+      _mm_pause();
+   }
+}
+
+static inline void
+unlock(bool *lck)
+{
+   __atomic_clear(lck, __ATOMIC_RELEASE);
+}
+
 void
 sketch_insert(sketch *sktch, KeyType key, ValueType value)
 {
    uint64_t index;
    for (uint64_t row = 0; row < sktch->rows; ++row) {
       index               = get_index_in_row(sktch, key, row);
-      sktch->table[index] = MAX(sktch->table[index], value);
+      lock(&sktch->table[index].latch);
+      sktch->table[index].value = MAX(sktch->table[index].value, value);
+      unlock(&sktch->table[index].latch);
    }
 }
 
@@ -79,10 +97,14 @@ sketch_get(sketch *sktch, KeyType key)
 {
    uint64_t  row   = 0;
    uint64_t  index = get_index_in_row(sktch, key, row);
-   ValueType value = sktch->table[index];
+   lock(&sktch->table[index].latch);
+   ValueType value = sktch->table[index].value;
+   unlock(&sktch->table[index].latch);
    for (row = 1; row < sktch->rows; ++row) {
       index = get_index_in_row(sktch, key, row);
-      value = MIN(sktch->table[index], value);
+      lock(&sktch->table[index].latch);
+      value = MIN(sktch->table[index].value, value);
+      unlock(&sktch->table[index].latch);
    }
    return value;
 }

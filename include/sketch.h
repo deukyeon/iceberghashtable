@@ -8,10 +8,15 @@ extern "C" {
 
 #include "types.h"
 
+typedef struct sketch_item {
+   ValueType value;
+   bool latch;
+} sketch_item;
+
 typedef struct sketch {
    uint64_t      rows;
    uint64_t      cols;
-   ValueType    *table;
+   sketch_item  *table;
    unsigned int *hashes;
 } sketch;
 
