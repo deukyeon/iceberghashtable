@@ -1542,7 +1542,7 @@ iceberg_put_or_insert(iceberg_table *table,
                       ValueType    **value,
                       uint8_t        thread_id,
                       bool           increase_refcount,
-                      bool           overwrite_value_if_exist)
+                      bool           overwrite_value)
 {
 #ifdef ENABLE_RESIZE
    if (unlikely(need_resize(table))) {
@@ -1612,7 +1612,7 @@ iceberg_put_or_insert(iceberg_table *table,
       if (increase_refcount) {
          kv->refcount++;
       }
-      if (overwrite_value_if_exist) {
+      if (overwrite_value) {
          kv->val = **value;
       }
 
@@ -1631,7 +1631,7 @@ iceberg_put_or_insert(iceberg_table *table,
 
       /*printf("Found!\n");*/
       unlock_block((uint64_t *)&metadata->lv1_md[bindex][boffset].block_md);
-      return true && overwrite_value_if_exist;
+      return true && overwrite_value;
    }
 
    const uint64_t refcount = 1;
@@ -1643,6 +1643,11 @@ iceberg_put_or_insert(iceberg_table *table,
 
    if (ret) {
       iceberg_get_value_internal(table, key, &kv, thread_id, false, false);
+      // If the sketch is enabled, get the value from the sketch to
+      // the new item and set the max.
+      if (table->sktch && !overwrite_value) {
+         kv->val = MAX(kv->val, sketch_get(table->sktch, key));
+      }
       *value = &kv->val;
    }
 

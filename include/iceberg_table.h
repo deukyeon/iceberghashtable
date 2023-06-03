@@ -123,9 +123,11 @@ iceberg_load_factor(iceberg_table *table);
 
 /**
  *
- * If there exists a key in the hash table, it increases its refcount by one
- * without updating the value. Otherwise, the value with the refcount of 1
- * is inserted.
+ * If there exists a key in the hash table, it increases its refcount
+ * by one without updating the value. Otherwise, the value with the
+ * refcount of 1 is inserted. In this case, if the sketch is enabled,
+ * it set the bigger value between the new value and that from the
+ * sketch.
  *
  * @return If a new item is inserted, it returns true. Otherwise,
  * returns false.
@@ -139,8 +141,11 @@ iceberg_insert(iceberg_table *table,
 
 /**
  *
- * If there exists a key in the hash table, it does nothing. Otherwise, the
- * value with the refcount of 1 is inserted.
+ * If there exists a key in the hash table, it increases its refcount
+ * by one without updating the value. Otherwise, the value with the
+ * refcount of 1 is inserted. In this case, if the sketch is enabled,
+ * it set the bigger value between the new value and that from the
+ * sketch.
  *
  */
 bool

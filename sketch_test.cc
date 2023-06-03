@@ -4,6 +4,17 @@
 #include <iostream>
 #include <cassert>
 
+void sketch_dump(iceberg_table *table)
+{
+    for (uint64_t r = 0; r < table->sktch->rows; ++r) {
+        for (uint64_t c = 0; c < table->sktch->cols; ++c) {
+            uint64_t i = r * table->sktch->cols + c;
+            std::cout << (uint64_t)table->sktch->table[i].value << " ";
+        }
+        std::cout << "\n";
+    }
+}
+
 int test_iceberg_sketch() {
     iceberg_table table;
     if (iceberg_init_with_sketch(&table, 20, 5, 10)) {
@@ -36,16 +47,44 @@ int test_iceberg_sketch() {
     value = nullptr;
     
     iceberg_get_value(&table, (KeyType)keys[0].c_str(), &value, 0);
-    std::cout << "Get " << keys[0] << " from the sketch\n";
+    std::cout << "Get " << keys[0] << " from the sketch (expected: 1004)\n";
     std::cout << (uint64_t)*value << "\n";
 
-    for (uint64_t r = 0; r < table.sktch->rows; ++r) {
-        for (uint64_t c = 0; c < table.sktch->cols; ++c) {
-            uint64_t i = r * table.sktch->cols + c;
-            std::cout << (uint64_t)table.sktch->table[i].value << " ";
-        }
-        std::cout << "\n";
-    }
+    sketch_dump(&table);
+
+    iceberg_remove(&table, (KeyType)keys[0].c_str(), 0);
+    std::cout << keys[0] << " is removed\n";
+
+    value = nullptr;
+    iceberg_insert(&table, (KeyType)keys[0].c_str(), 10, 0);
+    std::cout << keys[0] << " with 10 is inserted to the cache\n";
+    
+    iceberg_get_value(&table, (KeyType)keys[0].c_str(), &value, 0);
+    std::cout << "Get " << keys[0] << " from the sketch (expected: 1004)\n";
+    std::cout << (uint64_t)*value << "\n";
+    
+    iceberg_remove(&table, (KeyType)keys[0].c_str(), 0);
+    std::cout << keys[0] << " is removed\n";
+
+    value = nullptr;
+    iceberg_insert(&table, (KeyType)keys[0].c_str(), 10000, 0);
+    std::cout << keys[0] << " with 10000 is inserted to the cache\n";
+    
+    iceberg_get_value(&table, (KeyType)keys[0].c_str(), &value, 0);
+    std::cout << "Get " << keys[0] << " from the sketch (expected: 10000)\n";
+    std::cout << (uint64_t)*value << "\n";
+
+    iceberg_remove(&table, (KeyType)keys[0].c_str(), 0);
+    std::cout << keys[0] << " is removed\n";
+    
+    iceberg_get_value(&table, (KeyType)keys[0].c_str(), &value, 0);
+    std::cout << "Get " << keys[0] << " from the sketch (expected: 10000)\n";
+    std::cout << (uint64_t)*value << "\n";
+
+    iceberg_remove(&table, (KeyType)keys[0].c_str(), 0);
+    std::cout << keys[0] << " is removed\n";
+
+    sketch_dump(&table);
 
     return 0;
 }

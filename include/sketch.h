@@ -10,7 +10,7 @@ extern "C" {
 
 typedef struct sketch_item {
    ValueType value;
-   bool latch;
+   bool      latch;
 } sketch_item;
 
 typedef struct sketch {
@@ -29,6 +29,10 @@ void
 sketch_insert(sketch *sktch, KeyType key, ValueType value);
 ValueType
 sketch_get(sketch *sktch, KeyType key);
+
+
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 #ifdef __cplusplus
 }

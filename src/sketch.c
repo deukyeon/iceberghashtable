@@ -19,11 +19,11 @@ sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
 
    sktch->table =
       (sketch_item *)mmap(NULL,
-                        sktch->rows * sktch->cols * sizeof(sketch_item),
-                        PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
-                        0,
-                        0);
+                          sktch->rows * sktch->cols * sizeof(sketch_item),
+                          PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
+                          0,
+                          0);
    if (!sktch->table) {
       perror("table malloc failed");
       exit(1);
@@ -62,10 +62,6 @@ get_index_in_row(sketch *sktch, KeyType key, uint64_t row)
    return row * sktch->cols + col;
 }
 
-#define MAX(x, y) ((x) > (y) ? (x) : (y))
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
-
 static inline void
 lock(bool *lck)
 {
@@ -85,7 +81,7 @@ sketch_insert(sketch *sktch, KeyType key, ValueType value)
 {
    uint64_t index;
    for (uint64_t row = 0; row < sktch->rows; ++row) {
-      index               = get_index_in_row(sktch, key, row);
+      index = get_index_in_row(sktch, key, row);
       lock(&sktch->table[index].latch);
       sktch->table[index].value = MAX(sktch->table[index].value, value);
       unlock(&sktch->table[index].latch);
@@ -95,8 +91,8 @@ sketch_insert(sketch *sktch, KeyType key, ValueType value)
 ValueType
 sketch_get(sketch *sktch, KeyType key)
 {
-   uint64_t  row   = 0;
-   uint64_t  index = get_index_in_row(sktch, key, row);
+   uint64_t row   = 0;
+   uint64_t index = get_index_in_row(sktch, key, row);
    lock(&sktch->table[index].latch);
    ValueType value = sktch->table[index].value;
    unlock(&sktch->table[index].latch);
