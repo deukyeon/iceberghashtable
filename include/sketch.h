@@ -8,9 +8,13 @@ extern "C" {
 
 #include "types.h"
 
+#define USE_SKETCH_ITEM_LATCH 0
+
 typedef struct sketch_item {
    ValueType value;
-   bool      latch;
+#if USE_SKETCH_ITEM_LATCH
+   bool latch;
+#endif
 } sketch_item;
 
 typedef struct sketch {

@@ -62,6 +62,7 @@ get_index_in_row(sketch *sktch, KeyType key, uint64_t row)
    return row * sktch->cols + col;
 }
 
+#if USE_SKETCH_ITEM_LATCH
 static inline void
 lock(bool *lck)
 {
@@ -75,16 +76,35 @@ unlock(bool *lck)
 {
    __atomic_clear(lck, __ATOMIC_RELEASE);
 }
+#endif
 
 void
 sketch_insert(sketch *sktch, KeyType key, ValueType value)
 {
-   uint64_t index;
+   uint64_t  index;
+   ValueType current_value, max_value;
    for (uint64_t row = 0; row < sktch->rows; ++row) {
       index = get_index_in_row(sktch, key, row);
+#if USE_SKETCH_ITEM_LATCH
+      // Make the compiler be quiet
+      (void)current_value;
+      (void)max_value;
+
       lock(&sktch->table[index].latch);
       sktch->table[index].value = MAX(sktch->table[index].value, value);
       unlock(&sktch->table[index].latch);
+#else
+      do {
+         current_value =
+            __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED);
+         max_value = MAX(current_value, value);
+      } while (!__atomic_compare_exchange(&sktch->table[index].value,
+                                          &current_value,
+                                          &max_value,
+                                          true,
+                                          __ATOMIC_RELAXED,
+                                          __ATOMIC_RELAXED));
+#endif
    }
 }
 
@@ -93,14 +113,24 @@ sketch_get(sketch *sktch, KeyType key)
 {
    uint64_t row   = 0;
    uint64_t index = get_index_in_row(sktch, key, row);
+#if USE_SKETCH_ITEM_LATCH
    lock(&sktch->table[index].latch);
    ValueType value = sktch->table[index].value;
    unlock(&sktch->table[index].latch);
    for (row = 1; row < sktch->rows; ++row) {
       index = get_index_in_row(sktch, key, row);
       lock(&sktch->table[index].latch);
-      value = MIN(sktch->table[index].value, value);
+      value = MIN(value, sktch->table[index].value);
       unlock(&sktch->table[index].latch);
    }
+#else
+   ValueType value =
+      __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED);
+   for (row = 1; row < sktch->rows; ++row) {
+      index = get_index_in_row(sktch, key, row);
+      value = MIN(
+         value, __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED));
+   }
+#endif
    return value;
 }
