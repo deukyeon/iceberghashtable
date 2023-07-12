@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include <immintrin.h>
 
 void
@@ -17,9 +18,11 @@ sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
    sktch->rows = rows;
    sktch->cols = cols;
 
+   uint64_t table_size = sktch->rows * sktch->cols * sizeof(sketch_item);
+
    sktch->table =
       (sketch_item *)mmap(NULL,
-                          sktch->rows * sktch->cols * sizeof(sketch_item),
+                          table_size,
                           PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                           0,
@@ -28,6 +31,8 @@ sketch_init(uint64_t rows, uint64_t cols, sketch *sktch)
       perror("table malloc failed");
       exit(1);
    }
+
+   memset(sktch->table, 0, table_size);
 
    sktch->hashes =
       (unsigned int *)mmap(NULL,
@@ -53,12 +58,15 @@ sketch_deinit(sketch *sktch)
    munmap(sktch->hashes, sktch->rows * sizeof(unsigned int));
 }
 
-inline uint64_t
+static inline uint64_t
 get_index_in_row(sketch *sktch, KeyType key, uint64_t row)
 {
+   bool     should_compute_hash = sktch->cols > 1;
    uint64_t col =
-      MurmurHash64A_inline((const void *)key, KEY_SIZE, sktch->hashes[row])
-      % sktch->cols;
+      should_compute_hash
+         ? MurmurHash64A_inline((const void *)key, KEY_SIZE, sktch->hashes[row])
+              % sktch->cols
+         : 0;
    return row * sktch->cols + col;
 }
 
@@ -78,7 +86,7 @@ unlock(bool *lck)
 }
 #endif
 
-void
+inline void
 sketch_insert(sketch *sktch, KeyType key, ValueType value)
 {
    uint64_t  index;
@@ -86,7 +94,7 @@ sketch_insert(sketch *sktch, KeyType key, ValueType value)
    for (uint64_t row = 0; row < sktch->rows; ++row) {
       index = get_index_in_row(sktch, key, row);
 #if USE_SKETCH_ITEM_LATCH
-      // Make the compiler be quiet
+      // Make the compiler quiet
       (void)current_value;
       (void)max_value;
 
@@ -94,21 +102,26 @@ sketch_insert(sketch *sktch, KeyType key, ValueType value)
       sktch->table[index].value = MAX(sktch->table[index].value, value);
       unlock(&sktch->table[index].latch);
 #else
-      do {
-         current_value =
-            __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED);
+      current_value =
+         __atomic_load_n(&sktch->table[index].value, __ATOMIC_SEQ_CST);
+      while (current_value < value) {
          max_value = MAX(current_value, value);
-      } while (!__atomic_compare_exchange(&sktch->table[index].value,
-                                          &current_value,
-                                          &max_value,
-                                          true,
-                                          __ATOMIC_RELAXED,
-                                          __ATOMIC_RELAXED));
+         bool is_success =
+            __atomic_compare_exchange_n(&sktch->table[index].value,
+                                        &current_value,
+                                        max_value,
+                                        true,
+                                        __ATOMIC_SEQ_CST,
+                                        __ATOMIC_SEQ_CST);
+         if (is_success) {
+            break;
+         }
+      }
 #endif
    }
 }
 
-ValueType
+inline ValueType
 sketch_get(sketch *sktch, KeyType key)
 {
    uint64_t row   = 0;
@@ -125,11 +138,11 @@ sketch_get(sketch *sktch, KeyType key)
    }
 #else
    ValueType value =
-      __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED);
+      __atomic_load_n(&sktch->table[index].value, __ATOMIC_SEQ_CST);
    for (row = 1; row < sktch->rows; ++row) {
       index = get_index_in_row(sktch, key, row);
       value = MIN(
-         value, __atomic_load_n(&sktch->table[index].value, __ATOMIC_RELAXED));
+         value, __atomic_load_n(&sktch->table[index].value, __ATOMIC_SEQ_CST));
    }
 #endif
    return value;
